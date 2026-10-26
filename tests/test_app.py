@@ -181,6 +181,7 @@ class AppTests(unittest.TestCase):
 
     def test_stale_detected(self):
         import sqlite3
+        self.db.close()  # ב-Windows אי אפשר להחליף קובץ שפתוח בחיבור אחר
         time.sleep(1.2)
         c = sqlite3.connect(self.path)
         c.execute("DELETE FROM M WHERE ID=28")
