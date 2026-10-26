@@ -40,3 +40,16 @@ Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\launcher.pyw"""; Work
 Type: filesandordirs; Name: "{app}\code_prev"
 Type: filesandordirs; Name: "{app}\code"
 Type: filesandordirs; Name: "{app}\python"
+
+[Code]
+// Closes the program if it is running from the install folder, so files can be replaced
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  R: Integer;
+begin
+  Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+    '-NoProfile -ExecutionPolicy Bypass -Command "Get-Process | Where-Object { $_.Path -like ''' + ExpandConstant('{app}') + '\*'' } | Stop-Process -Force"',
+    '', SW_HIDE, ewWaitUntilTerminated, R);
+  Sleep(1000);
+  Result := '';
+end;
