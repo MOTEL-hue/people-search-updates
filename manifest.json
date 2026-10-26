@@ -4,17 +4,17 @@
   "files": [
     {
       "path": "app.py",
-      "url": "https://raw.githubusercontent.com/MOTEL-hue/people-search-updates/main/code/app.py",
-      "sha256": "a2548bbacc60ca44539ea35f8bb616982d003a04c685de970f6f0165776eef6d"
+      "url": "https://github.com/MOTEL-hue/people-search-updates/releases/download/v2.2/app.py",
+      "sha256": "2672e17dab97c05e56961e95c674e80a8a2db695d477790116794f65a095d43a"
     },
     {
       "path": "static/app.ico",
-      "url": "https://raw.githubusercontent.com/MOTEL-hue/people-search-updates/main/code/static/app.ico",
+      "url": "https://github.com/MOTEL-hue/people-search-updates/releases/download/v2.2/static__app.ico",
       "sha256": "7b645e703ddb728626aa9d8951f3bc759bb5eaa71565ede2c97e1ec68ee11844"
     },
     {
       "path": "static/index.html",
-      "url": "https://raw.githubusercontent.com/MOTEL-hue/people-search-updates/main/code/static/index.html",
+      "url": "https://github.com/MOTEL-hue/people-search-updates/releases/download/v2.2/static__index.html",
       "sha256": "7c5a133ea9d4437ea2a62ee1dfbbf9bea153cc10064908c510a873b1dee5d4ec"
     }
   ]

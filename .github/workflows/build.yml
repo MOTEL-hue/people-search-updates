@@ -67,4 +67,9 @@ jobs:
         run: |
           $tag = "v$env:APP_VERSION"
           gh release delete $tag --yes --cleanup-tag 2>$null
-          gh release create $tag out\PeopleSearch-Setup.exe --title "PeopleSearch $env:APP_VERSION" --notes "Installer. Download PeopleSearch-Setup.exe and run it."
+          New-Item -ItemType Directory -Force assets | Out-Null
+          Copy-Item code\app.py assets\app.py
+          Copy-Item code\static\index.html assets\static__index.html
+          Copy-Item code\static\app.ico assets\static__app.ico
+          Copy-Item manifest.json assets\manifest.json
+          gh release create $tag out\PeopleSearch-Setup.exe assets\app.py assets\static__index.html assets\static__app.ico assets\manifest.json --title "PeopleSearch $env:APP_VERSION" --notes "Installer (PeopleSearch-Setup.exe) and update files."

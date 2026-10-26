@@ -10,7 +10,7 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BASE = "https://raw.githubusercontent.com/MOTEL-hue/people-search-updates/main"
+BASE = "https://github.com/MOTEL-hue/people-search-updates/releases/download"
 
 
 def main():
@@ -22,7 +22,7 @@ def main():
         ("static/" + f, os.path.join(code, "static", f)) for f in sorted(os.listdir(os.path.join(code, "static")))]
     entries = []
     for rel, src in files:
-        entries.append({"path": rel, "url": "%s/code/%s" % (base, rel), "sha256": hashlib.sha256(open(src, "rb").read()).hexdigest()})
+        entries.append({"path": rel, "url": "%s/v%s/%s" % (base, ver, rel.replace("/", "__")), "sha256": hashlib.sha256(open(src, "rb").read()).hexdigest()})
     with open(os.path.join(out, "manifest.json"), "w", encoding="utf-8") as f:
         json.dump({"version": ver, "notes": "", "files": entries}, f, ensure_ascii=False, indent=2)
     print("גרסה", ver, "נוצרה ב", out)

@@ -55,7 +55,7 @@ CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 LOG_PATH = os.path.join(DATA_DIR, "changes.log")
 DIAG_LOG = os.path.join(DATA_DIR, "log.txt")
 VERSION = "2.2"
-DEFAULT_UPDATE_URL = "https://raw.githubusercontent.com/MOTEL-hue/people-search-updates/main/manifest.json"
+DEFAULT_UPDATE_URL = "https://github.com/MOTEL-hue/people-search-updates/releases/latest/download/manifest.json"
 
 LABELS = {
     "ID": "ת״ז", "L_NAME": "שם משפחה", "F_NAME": "שם פרטי", "F_NAME_OLD": "שם פרטי קודם",
@@ -1746,7 +1746,7 @@ def check_for_update(force=False):
             UPDATE.update(state="current", error=None)  # ערוץ העדכונים עדיין לא פורסם
             return
         log("בדיקת עדכון נכשלה: %r" % (e,))
-        UPDATE.update(state="error", error="השרת החזיר שגיאה %s" % e.code, checked=time.time() - 5.5 * 3600)
+        UPDATE.update(state="error", error="השרת (או סינון/חומת אש ברשת) החזיר שגיאה %s. אם הרשת מסננת אתרים, יש לאשר את הכתובת github.com" % e.code, checked=time.time() - 5.5 * 3600)
     except Exception as e:  # noqa
         log("בדיקת עדכון נכשלה: %r" % (e,))
         UPDATE.update(state="error", error=str(e)[:200], checked=time.time() - 5.5 * 3600)
