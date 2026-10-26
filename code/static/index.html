@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>חיפוש אנשים</title>
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--ink:#1c2733;--mut:#6b7886;--line:#dde3ea;--pri:#1f5fbf;--pri2:#e8f0fc;--bad:#c0392b;--ok:#1e8449}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",Arial,sans-serif}
+header{background:var(--pri);color:#fff;display:flex;gap:12px;align-items:center;padding:8px 16px;flex-wrap:wrap}
+header h1{font-size:18px;margin:0}
+header .path{opacity:.85;font-size:12px;direction:ltr;flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:6px;padding:5px 12px;color:var(--ink)}
+button:hover{background:var(--pri2)}
+button.pri{background:var(--pri);color:#fff;border-color:var(--pri)}button.pri:hover{background:#184c99}
+button.bad{color:var(--bad);border-color:var(--bad)}
+header button{background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.4)}
+nav{display:flex;gap:4px;padding:8px 16px 0;border-bottom:1px solid var(--line);background:#fff;overflow-x:auto}
+nav button{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;padding:8px 14px}
+nav button.on{border-bottom-color:var(--pri);color:var(--pri);font-weight:600}
+main{padding:14px 16px;max-width:1500px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
+input,select,textarea{font:inherit;border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%;background:#fff;color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--pri2);border-color:var(--pri)}
+label{display:block;font-size:12px;color:var(--mut);margin-bottom:2px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.big{font-size:18px;padding:10px 12px}
+.tbl-wrap{overflow:auto;max-height:62vh;border:1px solid var(--line);border-radius:8px;background:#fff}
+table{border-collapse:collapse;width:100%}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{position:sticky;top:0;background:#eef2f7;cursor:pointer;user-select:none;font-size:13px}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--pri2)}
+.mut{color:var(--mut)}.pill{display:inline-block;background:var(--pri2);color:var(--pri);border-radius:10px;padding:1px 8px;font-size:12px}
+.warn{background:#fff6e0;border:1px solid #f1d089;border-radius:8px;padding:8px 12px;margin-bottom:10px}
+.err{background:#fdecea;border:1px solid #f5b7b1;color:#922;border-radius:8px;padding:8px 12px;margin-bottom:10px}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:30px 12px;z-index:10}
+#modal .box{background:#fff;border-radius:10px;max-width:900px;width:100%;padding:16px}
+dl{display:grid;grid-template-columns:130px 1fr;gap:4px 12px;margin:0}dt{color:var(--mut)}dd{margin:0}
+h3{margin:14px 0 6px}
+.link{color:var(--pri);cursor:pointer;text-decoration:underline}
+.toast{position:fixed;bottom:16px;left:16px;background:#1c2733;color:#fff;padding:10px 16px;border-radius:8px;z-index:20;display:none}
+@media print{header,nav,.noprint,#modal .noprint{display:none!important}.tbl-wrap{max-height:none;overflow:visible}}
+</style>
+</head>
+<body>
+<header>
+  <h1>🔎 חיפוש אנשים</h1><span class="path" id="path"></span>
+  <button id="btnOpen">החלפת קובץ</button><button id="btnReload">רענון</button><button id="btnBackup">גיבוי עכשיו</button><button id="btnQuit">יציאה</button>
+</header>
+<nav id="tabs"></nav>
+<main id="main"></main>
+<div id="modal"><div class="box" id="modalBox"></div></div>
+<div class="toast" id="toast"></div>
+<script>
+const TOKEN="__TOKEN__";
+let S={}, sortKey="L_NAME", sortDesc=false, page=0, lastRes={rows:[],total:0}, showHeb=false, tab="search";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function api(p,body){
+  let r;try{r=await fetch(p,{method:"POST",headers:{"X-Token":TOKEN,"Content-Type":"application/json"},body:JSON.stringify(body||{})})}
+  catch(e){throw new Error("התוכנה נסגרה או קרסה. סגרו את החלון והפעילו שוב את START.bat. אם זה קורה מיד אחרי בחירת הקובץ, שלחו לי את הקובץ log.txt מתיקיית התוכנה.")}
+  if(!r.ok){let m="שגיאה";try{m=(await r.json()).error}catch(e){}throw new Error(m)}
+  return r;
+}
+const j=async(p,b)=>(await api(p,b)).json();
+function toast(t){const e=$("#toast");e.textContent=t;e.style.display="block";clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display="none",3500)}
+setInterval(()=>j("/api/ping").catch(()=>{}),15000);
+
+const L=k=>(S.labels&&S.labels[k])||k;
+function birthTxt(r){const s=String(r.B_YEAR||"").replace(/\D/g,"");if(s.length<4)return"";
+  const y=s.slice(0,4),m=s.slice(4,6),d=s.slice(6,8);return d&&m?`${d}/${m}/${y}`:(m?`${m}/${y}`:y)}
+function hebDate(r){const s=String(r.B_YEAR||"").replace(/\D/g,"");if(s.length<8)return"";
+  const dt=new Date(+s.slice(0,4),+s.slice(4,6)-1,+s.slice(6,8));if(isNaN(dt))return"";
+  try{return new Intl.DateTimeFormat("he-IL-u-ca-hebrew",{day:"numeric",month:"long",year:"numeric"}).format(dt)}catch(e){return""}}
+const addr=r=>[r.STREET,r.HOUSE&&r.HOUSE!=0?r.HOUSE:""].filter(Boolean).join(" ");
+const cityOf=r=>r.city_name||(r.ID_CITY?`קוד ${r.ID_CITY}`:"");
+const countryOf=r=>r.country_name||(r.B_COUNTRY?`קוד ${r.B_COUNTRY}`:"");
+const statusOf=r=>r.status_name||(r.ID_MAT_STATUS?`קוד ${r.ID_MAT_STATUS}`:"");
+
+const TABS=[["search","חיפוש"],["bulk","חיפוש רשימה"],["reports","דוחות"],["settings","הגדרות"],["diag","אבחון"]];
+function drawTabs(){$("#tabs").innerHTML=TABS.map(([k,t])=>`<button class="${k==tab?"on":""}" data-t="${k}">${t}</button>`).join("");
+  document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;render()})}
+async function checkUpdateBanner(){
+ try{const u=await j("/api/update");let b=$("#upd-banner");
+  const later=sessionStorage.getItem("updLater")==u.version;
+  if(u.state=="ready"&&!later){if(!b){b=document.createElement("div");b.id="upd-banner";b.className="warn row";b.style.margin="8px 16px";$("#tabs").after(b)}
+   b.innerHTML=`<span>גרסה חדשה (${esc(u.version)}) הורדה ומחכה לאישור שלכם. ${esc(u.notes||"")}</span><span style="flex:1"></span><button class="pri" id="rst">התקנה והפעלה מחדש</button><button id="lat">אחר כך</button>`;
+   $("#rst").onclick=async()=>{try{await j("/api/restart",{install:true});document.body.innerHTML="<p style='padding:30px'>מתקין ומפעיל מחדש... החלון ייפתח בעוד רגע.</p>"}catch(e){toast(e.message)}};
+   $("#lat").onclick=()=>{sessionStorage.setItem("updLater",u.version);b.remove()}}
+  else if(b)b.remove()}catch(e){}}
+setInterval(checkUpdateBanner,60000);setTimeout(checkUpdateBanner,12000);
+function render(){drawTabs();$("#path").textContent=S.standalone?"מצב עצמאי: העותק המקומי הוא המקור (ללא קובץ Access)":(S.path||"");
+  if(tab=="diag")return renderDiag();
+  if(!S.connected){return renderOpen()}
+  ({search:renderSearch,bulk:renderBulk,reports:renderReports,settings:renderSettings})[tab]()}
+
+/* ---------- אבחון ---------- */
+async function renderDiag(){
+ $("#main").innerHTML=`<div class="card"><h3 style="margin-top:0">אבחון ויומן תקלות</h3>
+  <p class="mut">אם משהו לא עובד: לחצו "העתקה" והדביקו לי את התוכן בשיחה (אין בו נתוני אנשים, רק מידע טכני על המחשב והקובץ).</p>
+  <div class="row"><button class="pri" id="dc">העתקה</button><button id="dr">רענון</button><button id="dd">הורדה כקובץ</button></div>
+  <pre id="dt" dir="auto" style="white-space:pre-wrap;background:#f7f9fb;border:1px solid var(--line);border-radius:6px;padding:10px;max-height:60vh;overflow:auto;margin-top:10px;font-size:12px">טוען...</pre></div>`;
+ const load=async()=>{$("#dt").textContent="טוען...";
+  const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),8000);
+  try{const r=await fetch("/api/diag",{method:"POST",headers:{"X-Token":TOKEN,"Content-Type":"application/json"},body:"{}",signal:ctl.signal});
+   $("#dt").textContent=(await r.json()).text}
+  catch(e){$("#dt").textContent="השרת לא הגיב תוך 8 שניות (ייתכן שהוא עסוק בטעינת הקובץ או שנסגר).\nאפשר לפתוח ישירות את הקובץ log.txt שבתיקיית התוכנה בפנקס רשימות, ולהדביק לי אותו."}
+  finally{clearTimeout(to)}};
+ $("#dr").onclick=load;
+ $("#dc").onclick=async()=>{try{await navigator.clipboard.writeText($("#dt").textContent);toast("הועתק")}catch(e){const r=document.createRange();r.selectNodeContents($("#dt"));getSelection().removeAllRanges();getSelection().addRange(r);toast("סומן. לחצו Ctrl+C")}};
+ $("#dd").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([$("#dt").textContent],{type:"text/plain;charset=utf-8"}));a.download="אבחון.txt";a.click()};
+ await load()}
+
+/* ---------- פתיחת קובץ ---------- */
+function renderOpen(msg){$("#main").innerHTML=`<div class="card" style="max-width:640px;margin:30px auto">
+ <h2>בחירת קובץ Access</h2>
+ ${msg?`<div class="err">${esc(msg)}</div>`:""}
+ <p class="mut">בחרו את קובץ ה-accdb/mdb שמכיל את הטבלה M. התוכנה זוכרת את הקובץ להפעלה הבאה.</p>
+ <div class="row"><button class="pri" id="b1">בחירת קובץ...</button></div>
+ <details style="margin-top:10px"><summary class="link">יש לי כבר עותק מהיר (work.db) מגרסה קודמת</summary>
+  <p class="mut">אם בנית כבר עותק מהיר בעבר, בחרו אותו כאן כדי לא לבנות מחדש. אחר כך בחרו את קובץ ה-Access כרגיל.</p>
+  <button id="b3">בחירת work.db קיים...</button></details>
+ <p style="margin-top:14px">או הדביקו נתיב מלא:</p>
+ <input id="p" dir="ltr" placeholder="C:\\Users\\...\\file.accdb">
+ <p><label>סיסמה לקובץ (אם יש)</label><input id="pw" type="password"></p>
+ <button class="pri" id="b2">פתיחה</button></div>`;
+  const go=async path=>{const pw=$("#pw").value;
+    try{
+      if(S.standalone&&!confirm("אתם במצב עצמאי. פתיחת קובץ Access תחליף את העותק המקומי ותמחק את כל השינויים שנעשו בו. להמשיך?"))return;
+      await j("/api/open",{path,password:pw,confirm_replace:!!S.standalone});showLoading()}catch(e){renderOpen(e.message)}};
+  $("#b1").onclick=async()=>{try{const r=await j("/api/browse");if(r.path)go(r.path)}catch(e){renderOpen(e.message)}};
+  $("#b2").onclick=()=>go($("#p").value);
+  $("#b3").onclick=async()=>{try{const r=await j("/api/browse",{kind:"db"});if(r.path){await j("/api/adopt",{path:r.path});toast("העותק צורף. עכשיו בחרו את קובץ ה-Access.")}}catch(e){renderOpen(e.message)}}}
+
+/* ---------- טעינה עם התקדמות ---------- */
+let loadTimer=null;
+function fmtTime(sec){sec=Math.max(0,Math.round(sec));return sec>=60?`${Math.floor(sec/60)} דקות ו-${sec%60} שניות`:`${sec} שניות`}
+function showLoading(){
+ clearTimeout(loadTimer);
+ const tick=async()=>{
+  let p;try{p=await j("/api/progress")}catch(e){$("#main").innerHTML=`<div class="err">${esc(e.message)}</div>`;return}
+  if(p.state=="ready"){S=await j("/api/state");tab="search";render();return}
+  if(p.state=="error"){S={connected:false};if(tab!="diag")renderOpen(p.error||"הטעינה נכשלה");return}
+  if(tab=="diag"){loadTimer=setTimeout(tick,1500);return}
+  const pct=p.total?Math.min(100,Math.round(p.done/p.total*100)):null;
+  let eta="";if(p.total&&p.done>50&&p.elapsed>2){eta=`נותרו בערך ${fmtTime((p.total-p.done)*(p.elapsed/p.done)*0.9)}`}
+  $("#main").innerHTML=`<div class="card" style="max-width:640px;margin:30px auto"><h2 style="margin-top:0">טוען את הקובץ...</h2>
+   <p>שלב ${p.step||1} מתוך ${p.steps}: <b>${esc(p.stage)}</b></p>
+   ${pct!=null?`<div style="background:#e6ebf1;border-radius:8px;height:18px;overflow:hidden"><div style="background:var(--pri);height:100%;width:${pct}%;transition:width .4s"></div></div>
+   <p>${p.done.toLocaleString()} מתוך ${p.total.toLocaleString()} רשומות (${pct}%) ${eta?"· "+eta:""}</p>`:`<p class="mut">מתבצע...</p>`}
+   <p class="mut">עברו ${fmtTime(p.elapsed)}. הטעינה הראשונה היא האיטית; בפעמים הבאות התוכנה נפתחת מיידית (כל עוד הקובץ לא השתנה).</p></div>`;
+  loadTimer=setTimeout(tick,500)};
+ tick()}
+
+/* ---------- חיפוש ---------- */
+const FIELDS=[["ID","ת״ז / מזהה"],["L_NAME","שם משפחה"],["F_NAME","שם פרטי"],["F_NAME_OLD","שם פרטי קודם"],["FATHER_NAME","שם האב"],["MOTHER_NAME","שם האם"],
+ ["ID_FATHER","ת״ז האב"],["ID_MOTHER","ת״ז האם"],["ID_CITY","עיר (שם או קוד)"],["STREET","רחוב"],["HOUSE","מספר בית"],["B_COUNTRY","ארץ לידה (שם או קוד)"]];
+function renderSearch(){
+ const f=JSON.parse(sessionStorage.getItem("f")||"{}"),q=sessionStorage.getItem("q")||"";
+ $("#main").innerHTML=(S.stale?`<div class="warn row"><span>${esc(S.stale)} ייתכן שחסרים או שונים נתונים בחיפוש.</span><button id="upd" class="pri">עדכון מהקובץ (לוקח זמן)</button></div>`:"")+`
+ <div class="card">
+  <div class="row"><input id="q" class="big" style="flex:1;min-width:240px" placeholder="חיפוש חופשי: שם, תעודה, עיר, רחוב... (כל מילה = תחילת מילה; כמה מילים = כולן חייבות להופיע)" value="${esc(q)}">
+   <button class="pri big" id="go">חפש</button><button id="clr">נקה</button></div>
+  <details ${Object.keys(f).length?"open":""} style="margin-top:8px"><summary class="link">חיפוש מתקדם לפי שדות</summary>
+   <div class="grid" style="margin-top:8px">
+   ${FIELDS.map(([k,t])=>`<div><label>${t}</label><input data-f="${k}" value="${esc(f[k]||"")}" ${k=="ID_CITY"?'list="dlCity"':k=="B_COUNTRY"?'list="dlCountry"':k=="STREET"?'list="dlStreet"':""}></div>`).join("")}
+   <div><label>מצב אישי</label><select data-f="ID_MAT_STATUS"><option value="">הכול</option>${(S.marital_codes||[]).filter(c=>c[0]!=="").map(([c,n])=>`<option value="${c}" ${f.ID_MAT_STATUS==c?"selected":""}>${esc((S.marital||{})[c]||"קוד "+c)} (${n})</option>`).join("")}</select></div>
+   <div><label>שנת לידה מ-</label><input data-f="year_from" type="number" value="${esc(f.year_from||"")}"></div>
+   <div><label>שנת לידה עד</label><input data-f="year_to" type="number" value="${esc(f.year_to||"")}"></div>
+   <div><label>גיל מ-</label><input data-f="age_from" type="number" value="${esc(f.age_from||"")}"></div>
+   <div><label>גיל עד</label><input data-f="age_to" type="number" value="${esc(f.age_to||"")}"></div>
+   <div><label>נולד בחודש (לועזי)</label><select data-f="born_month"><option value="">הכול</option>${[...Array(12)].map((_,i)=>`<option value="${i+1}" ${f.born_month==i+1?"selected":""}>${i+1}</option>`).join("")}</select></div>
+   <div><label>סוג התאמה</label><select id="mode"><option value="contains">מכיל</option><option value="starts">מתחיל ב</option><option value="exact">זהה בדיוק</option></select></div>
+   <div style="grid-column:1/-1"><label style="display:flex;gap:6px;align-items:center;font-size:14px;color:var(--ink)"><input type="checkbox" id="fuzzy" style="width:auto" ${sessionStorage.getItem("fz")=="1"?"checked":""}> חיפוש מקורב: מוצא גם שגיאות כתיב ושמות דומים (כהן/קהן, ביטון/ביטן)</label></div>
+   </div></details>
+  <datalist id="dlCity">${(S.cities||[]).map(c=>`<option value="${esc(c)}">`).join("")}</datalist>
+  <datalist id="dlCountry">${(S.countries||[]).map(c=>`<option value="${esc(c)}">`).join("")}</datalist>
+  <datalist id="dlStreet">${(S.streets||[]).slice(0,4000).map(c=>`<option value="${esc(c)}">`).join("")}</datalist>
+ </div>
+ <div class="row noprint" style="margin-bottom:8px"><span id="count" class="pill"></span>
+  <label style="display:inline-flex;gap:4px;align-items:center;margin:0"><input type="checkbox" id="heb" style="width:auto" ${showHeb?"checked":""}> תאריך לידה עברי</label>
+  <span style="flex:1"></span><button id="add">➕ הוספת אדם</button><button id="exp">📥 ייצוא לאקסל</button><button id="prt">🖨 הדפסה</button></div>
+ <div id="exp2" class="mut" style="margin-bottom:6px;font-size:13px"></div>
+ <div class="tbl-wrap"><table><thead id="th"></thead><tbody id="tb"></tbody></table></div>
+ <div class="row noprint" id="pager" style="margin-top:8px"></div>`;
+ if($("#upd"))$("#upd").onclick=async()=>{if(confirm("העדכון יקרא מחדש את כל הקובץ וייקח זמן. להמשיך?")){try{await j("/api/reload");showLoading()}catch(e){toast(e.message)}}};
+ const run=(reset=true)=>{if(reset)page=0;doSearch()};
+ $("#go").onclick=()=>run();
+ $("#q").onkeydown=e=>{if(e.key=="Enter")run()};
+ document.querySelectorAll("[data-f]").forEach(i=>i.onkeydown=e=>{if(e.key=="Enter")run()});
+ $("#clr").onclick=()=>{sessionStorage.removeItem("f");sessionStorage.removeItem("q");renderSearch();doSearch()};
+ $("#heb").onchange=e=>{showHeb=e.target.checked;drawResults()};
+ $("#add").onclick=()=>editForm(null);
+ $("#exp").onclick=()=>download("/api/export",searchParams(),"אנשים");
+ $("#prt").onclick=()=>window.print();
+ doSearch();
+}
+function searchParams(){const f={};document.querySelectorAll("[data-f]").forEach(i=>{if(i.value.trim())f[i.dataset.f]=i.value.trim()});
+ const q=$("#q").value.trim();sessionStorage.setItem("f",JSON.stringify(f));sessionStorage.setItem("q",q);
+ const fz=$("#fuzzy")&&$("#fuzzy").checked;sessionStorage.setItem("fz",fz?"1":"0");
+ return {q,f,mode:$("#mode").value,fuzzy:fz,sort:sortKey,desc:sortDesc,offset:page*S.page_size,limit:S.page_size}}
+let busy=0;
+async function doSearch(){const my=++busy;try{const r=await j("/api/search",searchParams());if(my!=busy)return;lastRes=r;drawResults()}catch(e){toast(e.message)}}
+const COLS=[["ID","ת״ז"],["L_NAME","שם משפחה"],["F_NAME","שם פרטי"],["B_YEAR","תאריך לידה"],["age","גיל"],["city_name","עיר"],["STREET","כתובת"],["country_name","ארץ לידה"],["status_name","מצב אישי"],["FATHER_NAME","שם האב"],["MOTHER_NAME","שם האם"]];
+function rowCells(r){return [r.ID,r.L_NAME,r.F_NAME,birthTxt(r)+(showHeb&&hebDate(r)?` <span class="mut">(${esc(hebDate(r))})</span>`:""),r.age,cityOf(r),addr(r),countryOf(r),statusOf(r),r.FATHER_NAME,r.MOTHER_NAME]}
+function drawResults(){
+ const ex=Object.entries(lastRes.expanded||{}).filter(e=>e[1].length);
+ $("#exp2").innerHTML=ex.length?"הורחב לשמות דומים: "+ex.map(([w,v])=>`<b>${esc(w)}</b> ← ${esc(v.slice(0,8).join(", "))}${v.length>8?"…":""}`).join(" · "):"";
+ $("#count").textContent=`נמצאו ${lastRes.total.toLocaleString()}${lastRes.capped?"+":""} מתוך ${S.total.toLocaleString()}`;
+ $("#th").innerHTML="<tr>"+COLS.map(([k,t])=>`<th data-k="${k}">${t}${sortKey==k?(sortDesc?" ▼":" ▲"):""}</th>`).join("")+"</tr>";
+ $("#th").querySelectorAll("th").forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(sortKey==k)sortDesc=!sortDesc;else{sortKey=k;sortDesc=false}page=0;doSearch()});
+ $("#tb").innerHTML=lastRes.rows.map((r,i)=>"<tr data-i="+i+">"+rowCells(r).map((c,ci)=>`<td>${ci==3?c:esc(c)}</td>`).join("")+"</tr>").join("")||`<tr><td colspan="11" class="mut" style="padding:20px">לא נמצאו תוצאות</td></tr>`;
+ $("#tb").querySelectorAll("tr[data-i]").forEach(tr=>tr.onclick=()=>showPerson(lastRes.rows[tr.dataset.i].ID));
+ const pages=Math.ceil(lastRes.total/S.page_size);
+ $("#pager").innerHTML=pages>1?`<button ${page==0?"disabled":""} id="pp">הקודם</button><span>עמוד ${page+1} מתוך ${pages}</span><button ${page+1>=pages?"disabled":""} id="pn">הבא</button>`:"";
+ if(pages>1){$("#pp").onclick=()=>{page--;doSearch()};$("#pn").onclick=()=>{page++;doSearch()}}
+}
+async function download(url,body,name){try{const r=await api(url,body);const ext=r.headers.get("X-Ext")||"xlsx";const b=await r.blob();
+  const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`${name}.${ext}`;a.click();toast("הקובץ הורד")}catch(e){toast(e.message)}}
+
+/* ---------- כרטיס אדם ---------- */
+function openModal(h){$("#modalBox").innerHTML=h;$("#modal").style.display="flex"}
+function closeModal(){$("#modal").style.display="none"}
+$("#modal").onclick=e=>{if(e.target.id=="modal")closeModal()};
+document.addEventListener("keydown",e=>{if(e.key=="Escape")closeModal()});
+const personLink=p=>p?`<span class="link" data-pid="${p.ID}">${esc(p.F_NAME)} ${esc(p.L_NAME)}</span> <span class="mut">(${esc(p.ID)}${p.age!=null?`, גיל ${p.age}`:""})</span>`:"";
+function list(arr){return arr.length?"<ul>"+arr.map(p=>`<li>${personLink(p)}</li>`).join("")+"</ul>":`<span class="mut">אין</span>`}
+async function showPerson(id){
+ try{const {person:p,family:f}=await j("/api/person",{id});
+ openModal(`<div class="row noprint"><h2 style="margin:0;flex:1">${esc(p.F_NAME)} ${esc(p.L_NAME)}</h2>
+  <button id="ed">✏️ עריכה</button><button id="dp">שכפול</button><button class="bad" id="del">🗑 מחיקה</button><button id="cl">סגירה</button></div>
+  <dl style="margin-top:10px">
+   <dt>ת״ז / מזהה</dt><dd>${esc(p.ID)}</dd>
+   ${p.F_NAME_OLD?`<dt>שם פרטי קודם</dt><dd>${esc(p.F_NAME_OLD)}</dd>`:""}
+   <dt>תאריך לידה</dt><dd>${esc(birthTxt(p))} ${hebDate(p)?`<span class="mut">(${esc(hebDate(p))})</span>`:""} ${p.age!=null?`· גיל ${p.age}`:""}</dd>
+   <dt>ארץ לידה</dt><dd>${esc(countryOf(p))}</dd>
+   <dt>מצב אישי</dt><dd>${esc(statusOf(p))}</dd>
+   <dt>כתובת</dt><dd>${esc([addr(p),cityOf(p)].filter(Boolean).join(", "))}${p.BAIT?` · דירה ${esc(p.BAIT)}`:""}</dd>
+   <dt>אב</dt><dd>${f.father?personLink(f.father):esc(p.FATHER_NAME||"")}${f.father&&p.FATHER_NAME&&p.FATHER_NAME!=f.father.F_NAME?` <span class="mut">(בטבלה: ${esc(p.FATHER_NAME)})</span>`:""}</dd>
+   <dt>אם</dt><dd>${f.mother?personLink(f.mother):esc(p.MOTHER_NAME||"")}${f.mother&&p.MOTHER_NAME&&p.MOTHER_NAME!=f.mother.F_NAME?` <span class="mut">(בטבלה: ${esc(p.MOTHER_NAME)})</span>`:""}</dd>
+  </dl>
+  <h3>אחים ואחיות (לפי ת״ז הורים)</h3>${list(f.siblings)}
+  ${f.maybe_siblings.length?`<h3>אולי אחים (לפי שמות ההורים, לא מאומת)</h3>${list(f.maybe_siblings)}`:""}
+  <h3>ילדים</h3>${list(f.children)}
+  <h3>גרים באותה כתובת</h3>${list(f.same_address)}`);
+ $("#cl").onclick=closeModal;$("#ed").onclick=()=>editForm(p);
+ $("#dp").onclick=()=>editForm({...p,ID:S.next_id},true);
+ $("#del").onclick=async()=>{if(confirm(`למחוק את ${p.F_NAME} ${p.L_NAME}? נוצר גיבוי לפני המחיקה.`)){try{await j("/api/delete",{id:p.ID});toast("נמחק");closeModal();await refresh()}catch(e){toast(e.message)}}};
+ $("#modalBox").querySelectorAll("[data-pid]").forEach(e=>e.onclick=()=>showPerson(e.dataset.pid));
+ }catch(e){toast(e.message)}}
+
+function editForm(p,asNew){
+ const add=!p||asNew;p=p||{ID:S.next_id};
+ const fld=(k,extra="")=>S.cols.includes(k)?`<div><label>${L(k)}</label><input data-k="${k}" value="${esc(p[k]??"")}" ${extra}></div>`:"";
+ const sel=(k,list,map)=>S.cols.includes(k)?`<div><label>${L(k)}</label><select data-k="${k}"><option value=""></option>${Object.entries(map).sort((a,b)=>a[1].localeCompare(b[1],"he")).map(([c,n])=>`<option value="${c}" ${String(p[k]??"")==c?"selected":""}>${esc(n)} (${c})</option>`).join("")}</select></div>`:"";
+ const mar=S.cols.includes("ID_MAT_STATUS")?`<div><label>${L("ID_MAT_STATUS")}</label><select data-k="ID_MAT_STATUS"><option value=""></option>${(S.marital_codes||[]).filter(c=>c[0]!=="").map(([c])=>`<option value="${c}" ${String(p.ID_MAT_STATUS??"")==c?"selected":""}>${esc((S.marital||{})[c]||"קוד "+c)}</option>`).join("")}</select></div>`:"";
+ openModal(`<h2>${add?"הוספת אדם":"עריכת "+esc(p.F_NAME+" "+p.L_NAME)}</h2><div id="ferr"></div>
+  <div class="grid">
+   ${fld("ID",add?"":"disabled")}${fld("L_NAME")}${fld("F_NAME")}${fld("F_NAME_OLD")}
+   <div><label>${L("B_YEAR")} (שנה, או 19500231)</label><input data-k="B_YEAR" value="${esc(p.B_YEAR??"")}" placeholder="yyyymmdd"></div>
+   ${mar}${sel("B_COUNTRY",0,S.country_map||{})}${sel("ID_CITY",0,S.city_map||{})}
+   ${fld("STREET",'list="dlStreet2"')}${fld("HOUSE")}${fld("BAIT")}
+   ${fld("FATHER_NAME")}${fld("MOTHER_NAME")}${fld("ID_FATHER")}${fld("ID_MOTHER")}
+  </div>
+  <datalist id="dlStreet2">${(S.streets||[]).slice(0,4000).map(c=>`<option value="${esc(c)}">`).join("")}</datalist>
+  <p class="mut">לפני שמירה נוצר גיבוי אוטומטי של הקובץ (לכל היותר פעם בחצי שעה).</p>
+  <div class="row"><button class="pri" id="sv">שמירה</button><button id="cx">ביטול</button></div>`);
+ $("#cx").onclick=closeModal;
+ $("#sv").onclick=async()=>{const d={};document.querySelectorAll("#modalBox [data-k]").forEach(i=>d[i.dataset.k]=i.value);
+  if(!add)d.ID=p.ID;
+  try{const r=await j("/api/save",{mode:add?"add":"edit",data:d});toast("נשמר");closeModal();await refresh();showPerson(r.person.ID)}
+  catch(e){$("#ferr").innerHTML=`<div class="err">${esc(e.message)}</div>`}}}
+async function refresh(){S=await j("/api/state");if(tab=="search")doSearch()}
+
+/* ---------- חיפוש רשימה ---------- */
+const BULK_HINT={auto:"הדביקו רשימה, שורה לכל אדם: ת״ז (אפשר כמה בשורה) או שם. שמות נמצאים לפי תחילת מילה.",
+ id:"הדביקו רשימת ת״ז (בכל מבנה: שורות, פסיקים או רווחים). מוצאים רק התאמה מדויקת של המספר.",
+ name_exact:"שורה לכל אדם: שם פרטי ושם משפחה (בכל סדר, או מופרדים בפסיק/טאב). מוצאים רק שם פרטי ומשפחה זהים בדיוק.",
+ name_approx:"שורה לכל אדם: שם. מוצאים גם שגיאות כתיב ושמות דומים."};
+function renderBulk(){
+ const mode=sessionStorage.getItem("bm")||"auto";
+ $("#main").innerHTML=`<div class="card">
+ <div class="row" style="margin-bottom:8px"><label style="margin:0">סוג החיפוש:</label>
+  <select id="bmode" style="width:auto;min-width:260px"><option value="auto">אוטומטי (ת״ז או שם)</option><option value="id">לפי ת״ז: התאמה מדויקת</option>
+  <option value="name_exact">לפי שם: התאמה מדויקת (פרטי + משפחה)</option><option value="name_approx">לפי שם: מקורב (שגיאות כתיב)</option></select></div>
+ <p id="bhint" class="mut" style="margin-top:0"></p>
+ <textarea id="bt" rows="8" placeholder="123456789&#10;דוד כהן&#10;לוי רחל"></textarea>
+ <div class="row" style="margin-top:8px"><button class="pri" id="bg">חיפוש</button><span id="bs" class="pill" style="display:none"></span><span style="flex:1"></span><button id="bx" style="display:none">📥 ייצוא לאקסל</button></div></div>
+ <div id="br"></div>`;
+ $("#bmode").value=mode;$("#bhint").textContent=BULK_HINT[mode];
+ $("#bmode").onchange=e=>{sessionStorage.setItem("bm",e.target.value);$("#bhint").textContent=BULK_HINT[e.target.value]};
+ let found=[];
+ $("#bg").onclick=async()=>{try{const r=await j("/api/bulk",{text:$("#bt").value,mode:$("#bmode").value});found=r.found;
+  $("#bs").style.display="";$("#bs").textContent=`נבדקו ${r.asked} · נמצאו ${r.unique} אנשים · לא נמצאו ${r.missing.length}`;$("#bx").style.display=found.length?"":"none";
+  $("#br").innerHTML=(r.missing.length?`<div class="warn"><b>לא נמצאו (${r.missing.length}):</b> ${r.missing.slice(0,500).map(esc).join(" · ")}${r.missing.length>500?" …":""}
+    <div class="row" style="margin-top:6px"><button id="cm">העתקת הרשימה</button></div></div>`:"")+
+   `<div class="tbl-wrap"><table><thead><tr><th>חיפשתם</th>${COLS.map(c=>`<th>${c[1]}</th>`).join("")}</tr></thead><tbody>`+
+   found.map((p,i)=>`<tr data-i="${i}"><td>${esc(p.query)}${p.multi?' <span class="pill">כמה התאמות</span>':""}</td>${rowCells(p).map((c,ci)=>`<td>${ci==3?c:esc(c)}</td>`).join("")}</tr>`).join("")+`</tbody></table></div>`;
+  if($("#cm"))$("#cm").onclick=()=>{navigator.clipboard.writeText(r.missing.join("\n")).then(()=>toast("הועתק"),()=>toast("ההעתקה נכשלה"))};
+  $("#br").querySelectorAll("tr[data-i]").forEach(tr=>tr.onclick=()=>showPerson(found[tr.dataset.i].ID))}catch(e){toast(e.message)}};
+ $("#bx").onclick=()=>download("/api/export",{ids:[...new Set(found.map(p=>p.ID))]},"רשימה");
+}
+
+/* ---------- דוחות ---------- */
+const REPORTS=[["stats","סטטיסטיקה"],["birthdays","ימי הולדת קרובים"],["duplicates","כפילויות"],["missing","שדות חסרים"],["bad_birth","תאריכי לידה לא תקינים"],["bad_parents","קישורי הורים בעייתיים"],["bad_id","בדיקת ת״ז"]];
+function renderReports(){
+ $("#main").innerHTML=`<div class="card row">${REPORTS.map(([k,t])=>`<button data-r="${k}">${t}</button>`).join("")}</div><div id="rr"></div>`;
+ document.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>runReport(b.dataset.r))}
+function table(rows,extra){return `<div class="tbl-wrap"><table><thead><tr>${extra?`<th>${extra[0]}</th>`:""}${COLS.map(c=>`<th>${c[1]}</th>`).join("")}</tr></thead><tbody>`+
+ rows.map((p,i)=>`<tr data-id="${p.ID}">${extra?`<td>${esc(extra[1](p))}</td>`:""}${rowCells(p).map((c,ci)=>`<td>${ci==3?c:esc(c)}</td>`).join("")}</tr>`).join("")+"</tbody></table></div>"}
+async function runReport(name){
+ const box=$("#rr");box.innerHTML="טוען...";
+ try{
+  if(name=="birthdays"){return birthdaysUI(box)}
+  const r=await j("/api/report",{name});let h=`<h3>${esc(r.title)}</h3>`;
+  if(r.stats){h+=`<p class="mut">סה״כ ${r.total} רשומות</p><div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">`+
+   Object.entries(r.stats).map(([t,a])=>`<div class="card"><b>${t}</b><table>${a.map(([k,n])=>`<tr><td>${esc(k)}</td><td>${n}</td></tr>`).join("")}</table></div>`).join("")+"</div>"}
+  else if(r.groups){h+=`<p class="mut">${r.groups.length} קבוצות</p>`+r.groups.map(g=>table(g)).join("<br>")}
+  else{h+=`<p class="mut">${r.rows.length} רשומות</p>`+table(r.rows,r.rows[0]&&r.rows[0].problem?["בעיה",p=>p.problem]:null);
+   if(r.rows.length)h+=`<p><button id="rx">📥 ייצוא לאקסל</button></p>`}
+  box.innerHTML=h;
+  box.querySelectorAll("tr[data-id]").forEach(tr=>tr.onclick=()=>showPerson(tr.dataset.id));
+  if($("#rx"))$("#rx").onclick=()=>download("/api/export",{ids:r.rows.map(x=>x.ID)},"דוח")
+ }catch(e){box.innerHTML=`<div class="err">${esc(e.message)}</div>`}}
+async function birthdaysUI(box){
+ box.innerHTML=`<h3>ימי הולדת קרובים</h3><div class="row"><select id="bk"><option value="g">לפי תאריך לועזי</option><option value="h">לפי תאריך עברי</option></select>
+  <label style="margin:0">בעוד עד</label><input id="bd" type="number" value="30" style="width:80px"><label style="margin:0">ימים</label><button class="pri" id="bgo">הצג</button></div><div id="bo" style="margin-top:10px"></div>`;
+ $("#bgo").onclick=async()=>{
+  $("#bo").textContent="טוען...";
+  try{const r=await j("/api/report",{name:"birthdays",days:Math.min(+$("#bd").value||30,120),kind:$("#bk").value});
+  $("#bo").innerHTML=`<p class="mut">${esc(r.title)} · ${r.rows.length} אנשים</p><div class="tbl-wrap"><table><thead><tr><th>מתי</th><th>ת״ז</th><th>שם</th><th>תאריך לידה</th><th>גיל</th><th>עיר</th></tr></thead><tbody>`+
+   r.rows.map(x=>`<tr data-id="${x.ID}"><td>${x.days_left==0?"היום":"בעוד "+x.days_left+" ימים"}</td><td>${esc(x.ID)}</td><td>${esc(x.F_NAME)} ${esc(x.L_NAME)}</td><td>${esc(birthTxt(x))}${hebDate(x)?` <span class="mut">(${esc(hebDate(x))})</span>`:""}</td><td>${x.turning??""}</td><td>${esc(x.city_name||"")}</td></tr>`).join("")+"</tbody></table></div>";
+  $("#bo").querySelectorAll("tr[data-id]").forEach(tr=>tr.onclick=()=>showPerson(tr.dataset.id))}catch(e){$("#bo").innerHTML=`<div class="err">${esc(e.message)}</div>`}};
+ $("#bgo").click()}
+
+/* ---------- הגדרות ---------- */
+function renderSettings(){
+ const lk=S.lookups||{};
+ $("#main").innerHTML=`<div class="card"><h3 style="margin-top:0">מצב אישי: מה המשמעות של כל קוד?</h3>
+  <p class="mut">בקובץ נשמרים קודים (למשל 10, 20). כתבו שם לכל קוד כדי שיוצג בתוצאות ובחיפוש.</p>
+  <div class="grid">${(S.marital_codes||[]).filter(c=>c[0]!=="").map(([c,n])=>`<div><label>קוד ${c} (${n} אנשים)</label><input data-m="${c}" value="${esc((S.marital||{})[c]||"")}"></div>`).join("")}</div></div>
+ <div class="card"><h3 style="margin-top:0">טבלאות עזר: איזו עמודה היא הקוד ואיזו השם</h3>
+  <p class="mut">התוכנה מנחשת לבד. אם שם עיר/ארץ מוצג לא נכון, תקנו כאן. שינוי כאן מעדכן את אינדקס החיפוש ויכול לקחת זמן בקובץ גדול.</p>
+  ${Object.entries(lk).map(([t,v])=>`<div class="row" style="margin-bottom:6px"><b style="width:100px">${t}</b><span class="mut">${v.count} שורות</span>
+   <label style="margin:0">עמודת קוד</label><select data-lt="${t}" data-lk="key" style="width:160px">${v.cols.map(c=>`<option ${c==v.key?"selected":""}>${esc(c)}</option>`).join("")}</select>
+   <label style="margin:0">עמודת שם</label><select data-lt="${t}" data-lk="name" style="width:160px">${v.cols.map(c=>`<option ${c==v.name?"selected":""}>${esc(c)}</option>`).join("")}</select></div>`).join("")||"<p>לא נמצאו טבלאות עזר.</p>"}</div>
+ <button class="pri" id="ss">שמירת הגדרות</button>
+ <div class="card" style="margin-top:14px"><h3 style="margin-top:0">עבודה עצמאית (בלי קובץ Access)</h3>
+  ${S.standalone?`<p>אתם עובדים <b>במצב עצמאי</b>: כל הנתונים והשינויים נשמרים רק בעותק המקומי (<span dir="ltr">work.db</span>), והקובץ של Access כבר לא נחוץ. התוכנה נפתחת תמיד במהירות. גיבויים נשמרים בתיקייה "גיבויים_עצמאי".</p>`:
+  `<p class="mut">אפשר לנתק את התוכנה מקובץ ה-Access, כך שהעותק המקומי יהיה המקור היחיד. הניתוק מיידי. אחריו שינויים לא יופיעו ב-Access ושינויים שייעשו שם לא יופיעו כאן, אפשר למחוק או להעביר את קובץ ה-Access, והעבודה על הקובץ הזה תימשך בלי אותו. מומלץ לשמור עותק של קובץ ה-Access בצד.</p>
+  <button id="dt" class="bad">ניתוק מקובץ ה-Access</button>`}</div>
+ <div class="card" style="margin-top:14px"><h3 style="margin-top:0">עדכונים</h3><div id="updbox" class="mut">טוען...</div></div>
+ <div class="card" style="margin-top:14px"><h3 style="margin-top:0">מידע</h3><p>קובץ: <span dir="ltr">${esc(S.path)}</span><br>רשומות: ${S.total}<br>עמודות בטבלה M: <span dir="ltr">${S.cols.join(", ")}</span></p>
+  <p class="mut">גיבויים נשמרים בתיקייה "גיבויים_..." ליד הקובץ (5 אחרונים; גיבוי אוטומטי לפני שמירה, לכל היותר פעם בחצי שעה). יומן שינויים: changes.log ליד התוכנה. עותק החיפוש המהיר: work.db ליד התוכנה (מכיל את נתוני האנשים, אל תעבירו אותו הלאה).</p></div>`;
+ (async()=>{try{const u=await j("/api/update");$("#updbox").innerHTML=!u.enabled?`גרסה ${esc(u.current)}. עדכונים אוטומטיים לא מוגדרים בגרסה זו.`:
+   `גרסה ${esc(u.current)}. ${({current:"אין עדכון חדש.",ready:"עדכון "+esc(u.version)+" הורד וממתין לאישור שלכם (יופיע סרגל התקנה בראש המסך).",downloading:"מוריד עדכון...",checking:"בודק...",error:"שגיאה בבדיקת עדכון: "+esc(u.error||""),idle:"טרם נבדק."})[u.state]||""}
+   <div class="row" style="margin-top:8px"><label style="margin:0;display:flex;gap:6px;align-items:center;color:var(--ink);font-size:14px"><input type="checkbox" id="au" style="width:auto" ${u.auto?"checked":""}> בדיקה והורדה אוטומטית של עדכונים</label><label style="margin:0;display:flex;gap:6px;align-items:center;color:var(--ink);font-size:14px"><input type="checkbox" id="ai" style="width:auto" ${u.auto_install?"checked":""}> התקנה בלי לשאול (לא מומלץ)</label><button id="cu">בדיקת עדכון עכשיו</button></div>`;
+   if($("#au"))$("#au").onchange=e=>j("/api/update_settings",{auto:e.target.checked});
+   if($("#ai"))$("#ai").onchange=e=>j("/api/update_settings",{auto_install:e.target.checked});
+   if($("#cu"))$("#cu").onclick=async()=>{await j("/api/update",{check:true});toast("בודק...");setTimeout(renderSettings,4000)}}catch(e){}})();
+ if($("#dt"))$("#dt").onclick=async()=>{if(confirm("לנתק מקובץ ה-Access ולעבוד רק עם העותק המקומי? אחרי זה השינויים כאן לא יגיעו ל-Access. אפשר לשמור קודם עותק של קובץ ה-Access.")){try{S=await j("/api/detach");toast("התוכנה עצמאית עכשיו");render()}catch(e){toast(e.message)}}};
+ $("#ss").onclick=async()=>{const marital={},lookups={};
+  document.querySelectorAll("[data-m]").forEach(i=>marital[i.dataset.m]=i.value);
+  document.querySelectorAll("[data-lt]").forEach(i=>{(lookups[i.dataset.lt]??={})[i.dataset.lk]=i.value});
+  try{const r=await j("/api/config",{marital,lookups});if(r.loading){showLoading();return}S=await j("/api/state");toast("נשמר");renderSettings()}catch(e){toast(e.message)}}}
+
+$("#btnOpen").onclick=()=>{S.connected=false;render()};
+$("#btnReload").onclick=async()=>{try{await j("/api/reload");showLoading()}catch(e){toast(e.message)}};
+$("#btnBackup").onclick=async()=>{try{const r=await j("/api/backup");toast("גיבוי נוצר: "+r.file)}catch(e){toast(e.message)}};
+$("#btnQuit").onclick=async()=>{if(confirm("לסגור את התוכנה?")){await j("/api/quit").catch(()=>{});document.body.innerHTML="<p style='padding:30px'>התוכנה נסגרה. אפשר לסגור את החלון.</p>"}};
+function clientErr(m){const d=document.createElement("div");d.className="err";d.textContent=m+" (פרטים בלשונית אבחון)";document.body.prepend(d);j("/api/clientlog",{msg:m}).catch(()=>{})}
+window.addEventListener("error",e=>clientErr("שגיאה בתוכנה: "+e.message));
+window.addEventListener("unhandledrejection",e=>clientErr("שגיאה: "+(e.reason&&e.reason.message||e.reason)));
+(async()=>{S=await j("/api/state");if(S.loading)showLoading();else render()})();
+</script>
+</body></html>

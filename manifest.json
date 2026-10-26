@@ -1,0 +1,16 @@
+{
+  "version": "2.0",
+  "notes": "",
+  "files": [
+    {
+      "path": "app.py",
+      "url": "https://raw.githubusercontent.com/MOTEL-hue/people-search-updates/main/code/app.py",
+      "sha256": "276a0dba476a6d02e12680363cdff020f5b1765318bfffddd6487898e61b32ee"
+    },
+    {
+      "path": "static/index.html",
+      "url": "https://raw.githubusercontent.com/MOTEL-hue/people-search-updates/main/code/static/index.html",
+      "sha256": "06cc92122c81522615ae7161032f77d2b5e032b073e60791cabeea43d296b3cd"
+    }
+  ]
+}
