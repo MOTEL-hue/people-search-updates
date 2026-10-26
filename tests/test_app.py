@@ -4,7 +4,9 @@ import tempfile
 import time
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
+sys.path.insert(0, os.path.join(_ROOT, "code"))
 import app  # noqa: E402
 from make_sample_db import make  # noqa: E402
 
