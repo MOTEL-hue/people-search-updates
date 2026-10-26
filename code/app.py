@@ -54,7 +54,7 @@ DATA_DIR = _data_dir()
 CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 LOG_PATH = os.path.join(DATA_DIR, "changes.log")
 DIAG_LOG = os.path.join(DATA_DIR, "log.txt")
-VERSION = "2.1"
+VERSION = "2.2"
 DEFAULT_UPDATE_URL = "https://raw.githubusercontent.com/MOTEL-hue/people-search-updates/main/manifest.json"
 
 LABELS = {
@@ -1816,6 +1816,14 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/ping":
             return self._send(200, "PeopleSearch", "text/plain")
+        if path == "/focus":
+            f = STATE.get("focus")
+            if f:
+                threading.Thread(target=f, daemon=True).start()
+            return self._send(200, "native" if f else "edge", "text/plain")
+        if path == "/favicon.ico":
+            with open(os.path.join(RES_DIR, "static", "app.ico"), "rb") as f:
+                return self._send(200, f.read(), "image/x-icon")
         if path == "/":
             with open(os.path.join(RES_DIR, "static", "index.html"), encoding="utf-8") as f:
                 return self._send(200, f.read().replace("__TOKEN__", TOKEN), "text/html; charset=utf-8")
@@ -1960,6 +1968,61 @@ def open_window(url):
     webbrowser.open(url)
 
 
+APP_ID = "PeopleSearch.App"
+
+
+def set_app_id():
+    """מזהה אפליקציה ל-Windows: כך החלון מקובץ עם הקיצור שהוצמד לשורת המשימות."""
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+    except Exception:
+        pass
+
+
+def run_native(url):
+    """חלון משלו (WebView2) במקום חלון Edge: אייקון משלו בשורת המשימות, וסגירת החלון סוגרת את התוכנה.
+    מחזיר False אם אי אפשר (למשל אין WebView2), ואז נפתח חלון Edge כרגיל."""
+    if os.name != "nt":
+        return False
+    try:
+        import webview
+    except Exception as e:  # noqa
+        log("חלון משלו לא זמין (ייבוא): %r" % (e,))
+        return False
+    try:
+        set_app_id()
+        try:
+            webview.settings["ALLOW_DOWNLOADS"] = True
+        except Exception:
+            pass
+        win = webview.create_window("חיפוש אנשים", url, width=1320, height=880, min_size=(900, 600))
+
+        def focus():
+            try:
+                win.restore()
+                win.show()
+            except Exception:
+                pass
+        STATE["focus"] = focus
+
+        def after_start():
+            try:
+                import clr  # noqa
+                clr.AddReference("System.Drawing")
+                from System.Drawing import Icon
+                win.native.Icon = Icon(os.path.join(RES_DIR, "static", "app.ico"))
+            except Exception as e:  # noqa
+                log("הגדרת אייקון חלון נכשלה: %r" % (e,))
+        log("פותח חלון משלו (WebView2)")
+        webview.start(after_start, gui="edgechromium")
+        return True
+    except Exception as e:  # noqa
+        log("חלון משלו נכשל, עוברים ל-Edge: %r" % (e,))
+        STATE.pop("focus", None)
+        return False
+
+
 def watchdog():
     while True:
         time.sleep(5)
@@ -1976,7 +2039,14 @@ def main():
     if "--no-window" not in sys.argv:
         running = other_instance_url()
         if running:
-            open_window(running)
+            try:
+                import urllib.request
+                with urllib.request.urlopen(running + "focus", timeout=3) as r:
+                    mode = r.read(20)
+            except Exception:
+                mode = b"edge"
+            if mode != b"native":
+                open_window(running)
             return
     log("התוכנה הופעלה (גרסה %s)" % VERSION)
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -2010,10 +2080,13 @@ def main():
         print("Running at", url)
     except Exception:
         pass
-    if "--no-window" not in sys.argv:
-        threading.Timer(0.4, open_window, args=(url,)).start()
+    threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
-        server.serve_forever()
+        if "--no-window" not in sys.argv:
+            if run_native(url):
+                return  # החלון נסגר: התוכנה נסגרת
+            open_window(url)
+        threading.Event().wait()
     except KeyboardInterrupt:
         pass
     finally:

@@ -34,6 +34,12 @@ jobs:
           stage\python\python.exe -m pip install --no-warn-script-location -r requirements.txt
           Remove-Item -Recurse -Force stage\python\Lib\test, stage\python\Scripts, stage\python\include -ErrorAction SilentlyContinue
 
+      - name: Check native window libraries (non-fatal)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          stage\python\python.exe -c "import webview, clr_loader, pythonnet; print('native window libraries ok')"
+
       - name: Test
         shell: pwsh
         run: |
