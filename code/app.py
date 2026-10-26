@@ -24,15 +24,19 @@ APP_DIR = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen
 RES_DIR = getattr(sys, "_MEIPASS", APP_DIR)
 PORTABLE = os.path.basename(APP_DIR) == "code"  # מבנה נייד: תיקייה ראשית עם code (מתעדכן) ו-data (הנתונים)
 ROOT_DIR = os.path.dirname(APP_DIR) if PORTABLE else APP_DIR
+INSTALLED = PORTABLE and os.path.exists(os.path.join(ROOT_DIR, "installed.flag"))  # הותקנה בעזרת קובץ ההתקנה
 
 
 def _data_dir():
     """במבנה נייד הנתונים נשמרים בתיקיית data ליד התוכנה (עוברים איתה); אחרת בתיקיית המשתמש."""
     cands = []
+    local = os.path.join(os.environ["LOCALAPPDATA"], "PeopleSearch") if os.environ.get("LOCALAPPDATA") else None
+    if INSTALLED and local:
+        cands.append(local)  # בהתקנה רגילה הנתונים מחוץ לתיקיית התוכנה, ולכן נשמרים בעדכון ובהסרה
     if PORTABLE:
         cands.append(os.path.join(ROOT_DIR, "data"))
-    if os.environ.get("LOCALAPPDATA"):
-        cands.append(os.path.join(os.environ["LOCALAPPDATA"], "PeopleSearch"))
+    if local:
+        cands.append(local)
     for d in cands:
         try:
             os.makedirs(d, exist_ok=True)
@@ -50,7 +54,7 @@ DATA_DIR = _data_dir()
 CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 LOG_PATH = os.path.join(DATA_DIR, "changes.log")
 DIAG_LOG = os.path.join(DATA_DIR, "log.txt")
-VERSION = "2.0"
+VERSION = "2.1"
 DEFAULT_UPDATE_URL = "https://raw.githubusercontent.com/MOTEL-hue/people-search-updates/main/manifest.json"
 
 LABELS = {

@@ -1,0 +1,64 @@
+name: Build installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path code/app.py -Pattern '^VERSION = "([\d.]+)"').Matches[0].Groups[1].Value
+          "APP_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Download portable Python
+        shell: pwsh
+        run: |
+          $url = "https://github.com/astral-sh/python-build-standalone/releases/download/20241206/cpython-3.12.8+20241206-x86_64-pc-windows-msvc-install_only.tar.gz"
+          Invoke-WebRequest $url -OutFile py.tar.gz
+          New-Item -ItemType Directory -Force stage | Out-Null
+          tar -xzf py.tar.gz -C stage
+
+      - name: Install libraries
+        shell: pwsh
+        run: |
+          stage\python\python.exe -m pip install --no-warn-script-location -r requirements.txt
+          Remove-Item -Recurse -Force stage\python\Lib\test, stage\python\Scripts, stage\python\include -ErrorAction SilentlyContinue
+
+      - name: Test
+        shell: pwsh
+        run: |
+          stage\python\python.exe -m unittest discover -s tests
+
+      - name: Assemble program folder
+        shell: pwsh
+        run: |
+          Copy-Item -Recurse code stage\code
+          Copy-Item launcher.pyw, app.ico stage\
+          Set-Content -Path stage\installed.flag -Value "installed"
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc installer.iss
+          if (-not (Test-Path out\PeopleSearch-Setup.exe)) { throw "installer was not created" }
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "v$env:APP_VERSION"
+          gh release delete $tag --yes --cleanup-tag 2>$null
+          gh release create $tag out\PeopleSearch-Setup.exe --title "PeopleSearch $env:APP_VERSION" --notes "Installer. Download PeopleSearch-Setup.exe and run it."
